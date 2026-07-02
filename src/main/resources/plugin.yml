@@ -1,0 +1,22 @@
+name: CommandControl
+version: ${version}
+main: cc.commandcontrol.CommandControlPlugin
+api-version: '1.21'
+author: fruit
+description: Controlled console command proxy for trusted operators.
+commands:
+  cmdctl:
+    description: Execute a command as the server console.
+    usage: /cmdctl <command>
+    permission: commandcontrol.use
+  cmdctladmin:
+    description: Administrative commands for CommandControl.
+    usage: /cmdctladmin reload
+    permission: commandcontrol.admin
+permissions:
+  commandcontrol.use:
+    description: Allows use of /cmdctl when also OP and authorized in config.
+    default: op
+  commandcontrol.admin:
+    description: Allows reloading CommandControl configuration.
+    default: op

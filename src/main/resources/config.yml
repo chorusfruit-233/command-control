@@ -1,0 +1,5 @@
+# A player must be listed here, be OP, and have commandcontrol.use to use /cmdctl.
+# UUID is preferred. Name is accepted for local testing and first-time setup.
+authorized-players:
+  - uuid: "00000000-0000-0000-0000-000000000000"
+    name: "ExamplePlayer"

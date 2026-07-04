@@ -5,6 +5,8 @@ import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
+import org.bukkit.command.PluginCommand;
+import org.bukkit.command.TabExecutor;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -18,7 +20,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.logging.Level;
 
-public final class CommandControlPlugin extends JavaPlugin {
+public final class CommandControlPlugin extends JavaPlugin implements TabExecutor {
     private static final String USE_PERMISSION = "commandcontrol.use";
     private static final String ADMIN_PERMISSION = "commandcontrol.admin";
     private static final String SHELL_PERMISSION = "commandcontrol.shell";
@@ -27,11 +29,15 @@ public final class CommandControlPlugin extends JavaPlugin {
     private AuthorizationList shellAuthorizationList = new AuthorizationList(List.of());
     private ShellCommandSettings shellCommandSettings = ShellCommandSettings.DEFAULT;
     private final ShellCommandExecutor shellCommandExecutor = new ShellCommandExecutor();
+    private final ShellTabCompleter shellTabCompleter = new ShellTabCompleter();
 
     @Override
     public void onEnable() {
         saveDefaultConfig();
         reloadAuthorizationList();
+        registerCommand("cmdctl");
+        registerCommand("cmdctladmin");
+        registerCommand("cmdctlsh");
         getLogger().info("Loaded " + authorizationList.size() + " authorized player entries.");
     }
 
@@ -50,6 +56,21 @@ public final class CommandControlPlugin extends JavaPlugin {
         return false;
     }
 
+    @Override
+    public List<String> onTabComplete(CommandSender sender, Command command, String label, String[] args) {
+        String commandName = command.getName().toLowerCase();
+        if ("cmdctl".equals(commandName)) {
+            return completeMinecraftCommand(sender, args);
+        }
+        if ("cmdctladmin".equals(commandName)) {
+            return completeAdmin(args);
+        }
+        if ("cmdctlsh".equals(commandName)) {
+            return completeShellCommand(sender, args);
+        }
+        return List.of();
+    }
+
     private boolean handleCommandControl(CommandSender sender, String[] args) {
         if (!(sender instanceof Player player)) {
             sender.sendMessage(Component.text("Only players can use /cmdctl.", NamedTextColor.RED));
@@ -65,7 +86,7 @@ public final class CommandControlPlugin extends JavaPlugin {
             return true;
         }
 
-        Optional<String> normalizedCommand = ShellCommandNormalizer.normalize(String.join(" ", args));
+        Optional<String> normalizedCommand = CommandNormalizer.normalize(String.join(" ", args));
         if (normalizedCommand.isEmpty()) {
             player.sendMessage(Component.text("Usage: /cmdctl <command>", NamedTextColor.RED));
             return true;
@@ -97,6 +118,18 @@ public final class CommandControlPlugin extends JavaPlugin {
         return true;
     }
 
+    private List<String> completeMinecraftCommand(CommandSender sender, String[] args) {
+        if (!(sender instanceof Player player) || !canUseCommandControl(player)) {
+            return List.of();
+        }
+        String commandLine = CommandNormalizer.normalize(String.join(" ", args)).orElse("");
+        try {
+            return Bukkit.getCommandMap().tabComplete(Bukkit.getConsoleSender(), commandLine);
+        } catch (IllegalArgumentException exception) {
+            return List.of();
+        }
+    }
+
     private boolean handleShellCommand(CommandSender sender, String[] args) {
         if (!(sender instanceof Player player)) {
             sender.sendMessage(Component.text("Only players can use /cmdctlsh.", NamedTextColor.RED));
@@ -125,6 +158,33 @@ public final class CommandControlPlugin extends JavaPlugin {
         getLogger().info("Started shell command for " + playerDescription + ": " + shellCommand);
         Bukkit.getScheduler().runTaskAsynchronously(this, () -> executeShellCommand(player, playerDescription, shellCommand, settings));
         return true;
+    }
+
+    private List<String> completeShellCommand(CommandSender sender, String[] args) {
+        if (!(sender instanceof Player player) || !canUseShell(player)) {
+            return List.of();
+        }
+        return shellTabCompleter.complete(String.join(" ", args), shellCommandSettings);
+    }
+
+    private List<String> completeAdmin(String[] args) {
+        if (args.length <= 1) {
+            String prefix = args.length == 0 ? "" : args[0];
+            return CompletionUtils.filterByPrefix(List.of("reload"), prefix);
+        }
+        return List.of();
+    }
+
+    private boolean canUseCommandControl(Player player) {
+        return player.isOp()
+                && player.hasPermission(USE_PERMISSION)
+                && authorizationList.isAuthorized(player.getUniqueId(), player.getName());
+    }
+
+    private boolean canUseShell(Player player) {
+        return player.isOp()
+                && player.hasPermission(SHELL_PERMISSION)
+                && shellAuthorizationList.isAuthorized(player.getUniqueId(), player.getName());
     }
 
     private void executeShellCommand(Player player, String playerDescription, String shellCommand, ShellCommandSettings settings) {
@@ -197,6 +257,16 @@ public final class CommandControlPlugin extends JavaPlugin {
         authorizationList = loadAuthorizationList("authorized-players");
         shellAuthorizationList = loadAuthorizationList("shell-authorized-players");
         shellCommandSettings = loadShellCommandSettings();
+    }
+
+    private void registerCommand(String commandName) {
+        PluginCommand command = getCommand(commandName);
+        if (command == null) {
+            getLogger().warning("Command is missing from plugin.yml: " + commandName);
+            return;
+        }
+        command.setExecutor(this);
+        command.setTabCompleter(this);
     }
 
     private AuthorizationList loadAuthorizationList(String path) {

@@ -33,6 +33,8 @@ Command output sent to the command sender, such as vanilla command echo messages
 
 Shell commands require the separate `shell-authorized-players` whitelist. Output is returned after the process exits or times out, with configurable line truncation.
 
+Tab completion is available for proxied Minecraft commands and shell commands. Shell completion suggests executables from `PATH` and file paths from the configured working directory.
+
 ## Build
 
 ```bash

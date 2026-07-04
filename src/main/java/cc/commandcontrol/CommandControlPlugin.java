@@ -72,10 +72,11 @@ public final class CommandControlPlugin extends JavaPlugin {
         }
 
         String consoleCommand = normalizedCommand.get();
+        List<Component> output = new ArrayList<>();
         boolean submitted;
         try {
             submitted = Bukkit.dispatchCommand(
-                    new ConsoleForwardingCommandSender(player, Bukkit.getConsoleSender()),
+                    Bukkit.createCommandSender(output::add),
                     consoleCommand
             );
         } catch (RuntimeException exception) {
@@ -89,6 +90,9 @@ public final class CommandControlPlugin extends JavaPlugin {
             player.sendMessage(Component.text("Command submitted as console.", NamedTextColor.GREEN));
         } else {
             player.sendMessage(Component.text("Command was submitted, but no command handler accepted it.", NamedTextColor.YELLOW));
+        }
+        for (Component outputLine : output) {
+            player.sendMessage(outputLine);
         }
         return true;
     }

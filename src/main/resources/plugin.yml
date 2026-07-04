@@ -13,10 +13,17 @@ commands:
     description: Administrative commands for CommandControl.
     usage: /cmdctladmin reload
     permission: commandcontrol.admin
+  cmdctlsh:
+    description: Execute a Linux shell command on the server host.
+    usage: /cmdctlsh <linux command>
+    permission: commandcontrol.shell
 permissions:
   commandcontrol.use:
     description: Allows use of /cmdctl when also OP and authorized in config.
     default: op
   commandcontrol.admin:
     description: Allows reloading CommandControl configuration.
+    default: op
+  commandcontrol.shell:
+    description: Allows use of /cmdctlsh when also OP and authorized in the shell whitelist.
     default: op

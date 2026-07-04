@@ -3,3 +3,13 @@
 authorized-players:
   - uuid: "00000000-0000-0000-0000-000000000000"
     name: "ExamplePlayer"
+
+# A player must be listed here, be OP, and have commandcontrol.shell to use /cmdctlsh.
+# Shell commands run as the Linux user that owns the Minecraft server process.
+shell-authorized-players: []
+
+shell:
+  executable: "/bin/sh"
+  working-directory: "."
+  timeout-seconds: 10
+  max-output-lines: 80

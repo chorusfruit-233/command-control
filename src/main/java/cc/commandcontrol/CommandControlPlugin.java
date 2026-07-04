@@ -8,6 +8,9 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import java.io.IOException;
+import java.nio.file.Path;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -18,8 +21,12 @@ import java.util.logging.Level;
 public final class CommandControlPlugin extends JavaPlugin {
     private static final String USE_PERMISSION = "commandcontrol.use";
     private static final String ADMIN_PERMISSION = "commandcontrol.admin";
+    private static final String SHELL_PERMISSION = "commandcontrol.shell";
 
     private AuthorizationList authorizationList = new AuthorizationList(List.of());
+    private AuthorizationList shellAuthorizationList = new AuthorizationList(List.of());
+    private ShellCommandSettings shellCommandSettings = ShellCommandSettings.DEFAULT;
+    private final ShellCommandExecutor shellCommandExecutor = new ShellCommandExecutor();
 
     @Override
     public void onEnable() {
@@ -36,6 +43,9 @@ public final class CommandControlPlugin extends JavaPlugin {
         }
         if ("cmdctladmin".equals(commandName)) {
             return handleAdmin(sender, args);
+        }
+        if ("cmdctlsh".equals(commandName)) {
+            return handleShellCommand(sender, args);
         }
         return false;
     }
@@ -55,7 +65,7 @@ public final class CommandControlPlugin extends JavaPlugin {
             return true;
         }
 
-        Optional<String> normalizedCommand = CommandNormalizer.normalize(String.join(" ", args));
+        Optional<String> normalizedCommand = ShellCommandNormalizer.normalize(String.join(" ", args));
         if (normalizedCommand.isEmpty()) {
             player.sendMessage(Component.text("Usage: /cmdctl <command>", NamedTextColor.RED));
             return true;
@@ -83,6 +93,82 @@ public final class CommandControlPlugin extends JavaPlugin {
         return true;
     }
 
+    private boolean handleShellCommand(CommandSender sender, String[] args) {
+        if (!(sender instanceof Player player)) {
+            sender.sendMessage(Component.text("Only players can use /cmdctlsh.", NamedTextColor.RED));
+            return true;
+        }
+        if (!player.isOp() || !player.hasPermission(SHELL_PERMISSION)) {
+            player.sendMessage(Component.text("You must be OP and have " + SHELL_PERMISSION + " to use this command.", NamedTextColor.RED));
+            return true;
+        }
+        if (!shellAuthorizationList.isAuthorized(player.getUniqueId(), player.getName())) {
+            player.sendMessage(Component.text("You are not authorized in CommandControl's shell whitelist.", NamedTextColor.RED));
+            getLogger().warning("Rejected /cmdctlsh from unauthorized player " + describe(player) + ".");
+            return true;
+        }
+
+        Optional<String> normalizedCommand = ShellCommandNormalizer.normalize(String.join(" ", args));
+        if (normalizedCommand.isEmpty()) {
+            player.sendMessage(Component.text("Usage: /cmdctlsh <linux command>", NamedTextColor.RED));
+            return true;
+        }
+
+        String shellCommand = normalizedCommand.get();
+        String playerDescription = describe(player);
+        ShellCommandSettings settings = shellCommandSettings;
+        player.sendMessage(Component.text("Shell command started.", NamedTextColor.GRAY));
+        getLogger().info("Started shell command for " + playerDescription + ": " + shellCommand);
+        Bukkit.getScheduler().runTaskAsynchronously(this, () -> executeShellCommand(player, playerDescription, shellCommand, settings));
+        return true;
+    }
+
+    private void executeShellCommand(Player player, String playerDescription, String shellCommand, ShellCommandSettings settings) {
+        ShellCommandResult result;
+        try {
+            result = shellCommandExecutor.execute(shellCommand, settings);
+        } catch (IOException exception) {
+            getLogger().log(Level.SEVERE, "Shell command failed to start for " + playerDescription + ": " + shellCommand, exception);
+            sendShellFailure(player, "Shell command failed to start. Check the server log.");
+            return;
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            getLogger().log(Level.WARNING, "Shell command interrupted for " + playerDescription + ": " + shellCommand, exception);
+            sendShellFailure(player, "Shell command was interrupted. Check the server log.");
+            return;
+        }
+
+        getLogger().info("Finished shell command for " + playerDescription + ": " + shellCommand
+                + " (exit=" + result.exitCode()
+                + ", timedOut=" + result.timedOut()
+                + ", truncated=" + result.truncated()
+                + ", elapsedMs=" + result.elapsed().toMillis() + ")");
+        Bukkit.getScheduler().runTask(this, () -> sendShellResult(player, result));
+    }
+
+    private void sendShellFailure(Player player, String message) {
+        Bukkit.getScheduler().runTask(this, () -> player.sendMessage(Component.text(message, NamedTextColor.RED)));
+    }
+
+    private void sendShellResult(Player player, ShellCommandResult result) {
+        NamedTextColor statusColor = result.timedOut() || result.exitCode() != 0 ? NamedTextColor.YELLOW : NamedTextColor.GREEN;
+        String status = result.timedOut()
+                ? "Shell command timed out after " + result.elapsed().toMillis() + " ms."
+                : "Shell command finished with exit code " + result.exitCode() + " in " + result.elapsed().toMillis() + " ms.";
+        player.sendMessage(Component.text(status, statusColor));
+
+        if (result.outputLines().isEmpty()) {
+            player.sendMessage(Component.text("(no output)", NamedTextColor.DARK_GRAY));
+        } else {
+            for (String line : result.outputLines()) {
+                player.sendMessage(Component.text(line, NamedTextColor.GRAY));
+            }
+        }
+        if (result.truncated()) {
+            player.sendMessage(Component.text("Output truncated to " + result.maxOutputLines() + " lines.", NamedTextColor.YELLOW));
+        }
+    }
+
     private boolean handleAdmin(CommandSender sender, String[] args) {
         if (!sender.isOp() && !sender.hasPermission(ADMIN_PERMISSION)) {
             sender.sendMessage(Component.text("You must be OP or have " + ADMIN_PERMISSION + " to use this command.", NamedTextColor.RED));
@@ -95,23 +181,45 @@ public final class CommandControlPlugin extends JavaPlugin {
 
         reloadConfig();
         reloadAuthorizationList();
-        sender.sendMessage(Component.text("CommandControl reloaded. Authorized entries: " + authorizationList.size() + ".", NamedTextColor.GREEN));
-        getLogger().info("Configuration reloaded by " + sender.getName() + ". Authorized entries: " + authorizationList.size() + ".");
+        sender.sendMessage(Component.text("CommandControl reloaded. Authorized entries: " + authorizationList.size()
+                + ", shell entries: " + shellAuthorizationList.size() + ".", NamedTextColor.GREEN));
+        getLogger().info("Configuration reloaded by " + sender.getName()
+                + ". Authorized entries: " + authorizationList.size()
+                + ", shell entries: " + shellAuthorizationList.size() + ".");
         return true;
     }
 
     private void reloadAuthorizationList() {
+        authorizationList = loadAuthorizationList("authorized-players");
+        shellAuthorizationList = loadAuthorizationList("shell-authorized-players");
+        shellCommandSettings = loadShellCommandSettings();
+    }
+
+    private AuthorizationList loadAuthorizationList(String path) {
         List<AuthorizedPlayer> players = new ArrayList<>();
-        for (Map<?, ?> entry : getConfig().getMapList("authorized-players")) {
+        for (Map<?, ?> entry : getConfig().getMapList(path)) {
             UUID uuid = parseUuid(asString(entry.get("uuid")));
             String name = asString(entry.get("name"));
             if (uuid == null && (name == null || name.isBlank())) {
-                getLogger().warning("Ignoring authorized-players entry without uuid or name.");
+                getLogger().warning("Ignoring " + path + " entry without uuid or name.");
                 continue;
             }
             players.add(new AuthorizedPlayer(uuid, name));
         }
-        authorizationList = new AuthorizationList(players);
+        return new AuthorizationList(players);
+    }
+
+    private ShellCommandSettings loadShellCommandSettings() {
+        String executable = getConfig().getString("shell.executable", ShellCommandSettings.DEFAULT.executable());
+        String workingDirectory = getConfig().getString("shell.working-directory", ShellCommandSettings.DEFAULT.workingDirectory().toString());
+        int timeoutSeconds = Math.max(1, getConfig().getInt("shell.timeout-seconds", (int) ShellCommandSettings.DEFAULT.timeout().toSeconds()));
+        int maxOutputLines = Math.max(0, getConfig().getInt("shell.max-output-lines", ShellCommandSettings.DEFAULT.maxOutputLines()));
+        return new ShellCommandSettings(
+                executable == null || executable.isBlank() ? ShellCommandSettings.DEFAULT.executable() : executable,
+                Path.of(workingDirectory == null || workingDirectory.isBlank() ? "." : workingDirectory),
+                Duration.ofSeconds(timeoutSeconds),
+                maxOutputLines
+        );
     }
 
     private String asString(Object value) {

@@ -26,9 +26,12 @@ Players must satisfy all of these checks to use `/cmdctl`:
 Commands:
 
 - `/cmdctl <command>` runs `<command>` as the server console
+- `/cmdctlsh <linux command>` runs `<linux command>` through `/bin/sh -lc` on the server host
 - `/cmdctladmin reload` reloads the plugin configuration
 
 Command output sent to the command sender, such as vanilla command echo messages, is forwarded back to the player who ran `/cmdctl`.
+
+Shell commands require the separate `shell-authorized-players` whitelist. Output is returned after the process exits or times out, with configurable line truncation.
 
 ## Build
 

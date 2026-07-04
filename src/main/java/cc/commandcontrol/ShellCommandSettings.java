@@ -15,12 +15,18 @@ public final class ShellCommandSettings {
     private final Path workingDirectory;
     private final Duration timeout;
     private final int maxOutputLines;
+    private final ShellDialogMode dialogMode;
 
     public ShellCommandSettings(String executable, Path workingDirectory, Duration timeout, int maxOutputLines) {
+        this(executable, workingDirectory, timeout, maxOutputLines, ShellDialogMode.AUTO);
+    }
+
+    public ShellCommandSettings(String executable, Path workingDirectory, Duration timeout, int maxOutputLines, ShellDialogMode dialogMode) {
         this.executable = executable;
         this.workingDirectory = workingDirectory;
         this.timeout = timeout;
         this.maxOutputLines = maxOutputLines;
+        this.dialogMode = dialogMode;
     }
 
     public String executable() {
@@ -37,5 +43,9 @@ public final class ShellCommandSettings {
 
     public int maxOutputLines() {
         return maxOutputLines;
+    }
+
+    public ShellDialogMode dialogMode() {
+        return dialogMode;
     }
 }

@@ -35,7 +35,7 @@ Shell commands require the separate `shell-authorized-players` whitelist. Output
 
 Tab completion is available for proxied Minecraft commands and shell commands. Shell completion suggests executables from `PATH` and file paths from the configured working directory.
 
-On Minecraft/Paper versions with Dialog API support, running `/cmdctlsh` with no arguments opens a command input dialog. Shell command results are shown in a dialog window when available, and fall back to chat output on servers without Dialog API support.
+On Minecraft/Paper versions with Dialog API support, running `/cmdctlsh` with no arguments opens a command input dialog. Shell command results are shown in a dialog window when available, and fall back to chat output on servers without Dialog API support. If packet-inspection plugins such as GrimAC/PacketEvents cannot map newer Dialog packets, leave `shell.dialog-mode` as `auto` or set it to `disabled`.
 
 ## Build
 

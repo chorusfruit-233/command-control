@@ -13,3 +13,6 @@ shell:
   working-directory: "."
   timeout-seconds: 10
   max-output-lines: 80
+  # auto disables Dialog UI when known packet-inspection plugins cannot map new Dialog packets.
+  # Use enabled to force Dialog UI, or disabled to always use chat output.
+  dialog-mode: "auto"

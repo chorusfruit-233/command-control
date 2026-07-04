@@ -36,7 +36,6 @@ public final class CommandControlPlugin extends JavaPlugin implements TabExecuto
     public void onEnable() {
         saveDefaultConfig();
         reloadAuthorizationList();
-        shellDialogPresenter = ShellDialogPresenterFactory.create(this, this::handleShellDialogSubmission);
         registerCommand("cmdctl");
         registerCommand("cmdctladmin");
         registerCommand("cmdctlsh");
@@ -279,6 +278,7 @@ public final class CommandControlPlugin extends JavaPlugin implements TabExecuto
         authorizationList = loadAuthorizationList("authorized-players");
         shellAuthorizationList = loadAuthorizationList("shell-authorized-players");
         shellCommandSettings = loadShellCommandSettings();
+        shellDialogPresenter = ShellDialogPresenterFactory.create(this, this::handleShellDialogSubmission);
     }
 
     private void registerCommand(String commandName) {
@@ -310,11 +310,13 @@ public final class CommandControlPlugin extends JavaPlugin implements TabExecuto
         String workingDirectory = getConfig().getString("shell.working-directory", ShellCommandSettings.DEFAULT.workingDirectory().toString());
         int timeoutSeconds = Math.max(1, getConfig().getInt("shell.timeout-seconds", (int) ShellCommandSettings.DEFAULT.timeout().toSeconds()));
         int maxOutputLines = Math.max(0, getConfig().getInt("shell.max-output-lines", ShellCommandSettings.DEFAULT.maxOutputLines()));
+        ShellDialogMode dialogMode = ShellDialogMode.parse(getConfig().getString("shell.dialog-mode", "auto"));
         return new ShellCommandSettings(
                 executable == null || executable.isBlank() ? ShellCommandSettings.DEFAULT.executable() : executable,
                 Path.of(workingDirectory == null || workingDirectory.isBlank() ? "." : workingDirectory),
                 Duration.ofSeconds(timeoutSeconds),
-                maxOutputLines
+                maxOutputLines,
+                dialogMode
         );
     }
 

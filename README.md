@@ -41,7 +41,7 @@ gradle build
 
 The plugin jar is written to `build/libs/command-control-1.0.0.jar`.
 
-This project requires Java 21 for compilation. If `java -version` shows a different version, Gradle will still use `/usr/lib/jvm/java-21-openjdk` through the project `gradle.properties` file.
+This project requires Java 21 for compilation. The repository includes `.java-version`, so jenv should select Java 21 automatically when you are in this directory.
 
 ## License
 

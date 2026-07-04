@@ -64,7 +64,10 @@ public final class CommandControlPlugin extends JavaPlugin {
         String consoleCommand = normalizedCommand.get();
         boolean submitted;
         try {
-            submitted = Bukkit.dispatchCommand(Bukkit.getConsoleSender(), consoleCommand);
+            submitted = Bukkit.dispatchCommand(
+                    new ConsoleForwardingCommandSender(player, Bukkit.getConsoleSender()),
+                    consoleCommand
+            );
         } catch (RuntimeException exception) {
             getLogger().log(Level.SEVERE, "Console command failed for " + describe(player) + ": " + consoleCommand, exception);
             player.sendMessage(Component.text("Command failed before it could be submitted. Check the server log.", NamedTextColor.RED));

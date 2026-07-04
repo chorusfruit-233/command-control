@@ -28,6 +28,8 @@ Commands:
 - `/cmdctl <command>` runs `<command>` as the server console
 - `/cmdctladmin reload` reloads the plugin configuration
 
+Command output sent to the command sender, such as vanilla command echo messages, is forwarded back to the player who ran `/cmdctl`.
+
 ## Build
 
 ```bash

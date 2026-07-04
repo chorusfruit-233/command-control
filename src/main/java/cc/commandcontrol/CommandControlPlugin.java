@@ -30,15 +30,17 @@ public final class CommandControlPlugin extends JavaPlugin implements TabExecuto
     private ShellCommandSettings shellCommandSettings = ShellCommandSettings.DEFAULT;
     private final ShellCommandExecutor shellCommandExecutor = new ShellCommandExecutor();
     private final ShellTabCompleter shellTabCompleter = new ShellTabCompleter();
+    private ShellDialogPresenter shellDialogPresenter = ShellDialogPresenter.UNAVAILABLE;
 
     @Override
     public void onEnable() {
         saveDefaultConfig();
         reloadAuthorizationList();
+        shellDialogPresenter = ShellDialogPresenterFactory.create(this, this::handleShellDialogSubmission);
         registerCommand("cmdctl");
         registerCommand("cmdctladmin");
         registerCommand("cmdctlsh");
-        getLogger().info("Loaded " + authorizationList.size() + " authorized player entries.");
+        getLogger().info("Loaded " + authorizationList.size() + " authorized player entries. Dialog API available: " + shellDialogPresenter.isAvailable());
     }
 
     @Override
@@ -147,17 +149,37 @@ public final class CommandControlPlugin extends JavaPlugin implements TabExecuto
 
         Optional<String> normalizedCommand = ShellCommandNormalizer.normalize(String.join(" ", args));
         if (normalizedCommand.isEmpty()) {
-            player.sendMessage(Component.text("Usage: /cmdctlsh <linux command>", NamedTextColor.RED));
+            if (shellDialogPresenter.isAvailable()) {
+                shellDialogPresenter.showInput(player);
+            } else {
+                player.sendMessage(Component.text("Usage: /cmdctlsh <linux command>", NamedTextColor.RED));
+            }
             return true;
         }
 
-        String shellCommand = normalizedCommand.get();
+        startShellCommand(player, normalizedCommand.get());
+        return true;
+    }
+
+    private void handleShellDialogSubmission(Player player, String command) {
+        if (!canUseShell(player)) {
+            player.sendMessage(Component.text("You are no longer authorized to use /cmdctlsh.", NamedTextColor.RED));
+            return;
+        }
+        Optional<String> normalizedCommand = ShellCommandNormalizer.normalize(command);
+        if (normalizedCommand.isEmpty()) {
+            player.sendMessage(Component.text("Shell command cannot be empty.", NamedTextColor.RED));
+            return;
+        }
+        startShellCommand(player, normalizedCommand.get());
+    }
+
+    private void startShellCommand(Player player, String shellCommand) {
         String playerDescription = describe(player);
         ShellCommandSettings settings = shellCommandSettings;
         player.sendMessage(Component.text("Shell command started.", NamedTextColor.GRAY));
         getLogger().info("Started shell command for " + playerDescription + ": " + shellCommand);
         Bukkit.getScheduler().runTaskAsynchronously(this, () -> executeShellCommand(player, playerDescription, shellCommand, settings));
-        return true;
     }
 
     private List<String> completeShellCommand(CommandSender sender, String[] args) {
@@ -207,29 +229,29 @@ public final class CommandControlPlugin extends JavaPlugin implements TabExecuto
                 + ", timedOut=" + result.timedOut()
                 + ", truncated=" + result.truncated()
                 + ", elapsedMs=" + result.elapsed().toMillis() + ")");
-        Bukkit.getScheduler().runTask(this, () -> sendShellResult(player, result));
+        Bukkit.getScheduler().runTask(this, () -> sendShellResult(player, shellCommand, result));
     }
 
     private void sendShellFailure(Player player, String message) {
         Bukkit.getScheduler().runTask(this, () -> player.sendMessage(Component.text(message, NamedTextColor.RED)));
     }
 
-    private void sendShellResult(Player player, ShellCommandResult result) {
-        NamedTextColor statusColor = result.timedOut() || result.exitCode() != 0 ? NamedTextColor.YELLOW : NamedTextColor.GREEN;
-        String status = result.timedOut()
-                ? "Shell command timed out after " + result.elapsed().toMillis() + " ms."
-                : "Shell command finished with exit code " + result.exitCode() + " in " + result.elapsed().toMillis() + " ms.";
-        player.sendMessage(Component.text(status, statusColor));
-
-        if (result.outputLines().isEmpty()) {
-            player.sendMessage(Component.text("(no output)", NamedTextColor.DARK_GRAY));
-        } else {
-            for (String line : result.outputLines()) {
-                player.sendMessage(Component.text(line, NamedTextColor.GRAY));
-            }
+    private void sendShellResult(Player player, String shellCommand, ShellCommandResult result) {
+        ShellCommandPresentation presentation = ShellCommandPresentationFormatter.format(shellCommand, result);
+        if (shellDialogPresenter.isAvailable()) {
+            shellDialogPresenter.showResult(player, presentation);
+            return;
         }
-        if (result.truncated()) {
-            player.sendMessage(Component.text("Output truncated to " + result.maxOutputLines() + " lines.", NamedTextColor.YELLOW));
+
+        NamedTextColor statusColor = presentation.warning() ? NamedTextColor.YELLOW : NamedTextColor.GREEN;
+        List<String> lines = presentation.lines();
+        if (!lines.isEmpty()) {
+            player.sendMessage(Component.text(lines.get(0), statusColor));
+        }
+        for (int index = 1; index < lines.size(); index++) {
+            String line = lines.get(index);
+            NamedTextColor color = line.equals("(no output)") ? NamedTextColor.DARK_GRAY : NamedTextColor.GRAY;
+            player.sendMessage(Component.text(line, color));
         }
     }
 
